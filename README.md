@@ -1,97 +1,207 @@
-# FastSymbolicGP
+# FastSymbolicGP V0.7.0
 
-FastSymbolicGP is a standalone symbolic genetic programming library focused on speed, compact symbolic expressions, and sklearn-style usability.
+FastSymbolicGP is a scikit-learn-compatible symbolic machine-learning library for classification, regression, supervised symbolic feature construction, model distillation, and experimental symbolic networks.
 
-It is designed around:
+V0.7.0 is the **Scalable Symbolic Learning** release. It expands the V0.6.0 engine with island evolution, DAG execution, a persistent bounded subtree cache, shared-backbone multiclass learning, resource budgets, deployment export, model profiling, native missing-value operators, robustness objectives, and Publication Benchmark V3.
 
-- postfix / bytecode symbolic expression representation
-- fast expression evaluation with optional Numba acceleration
-- NumPy fallback evaluator
-- binary symbolic classification
-- symbolic regression
-- one-vs-rest multiclass symbolic classification
-- symbolic ensemble classifiers and regressors
-- subtree mutation
-- subtree crossover
-- point mutation
-- elite expression export
-- symbolic expression strings
-- simple LaTeX export helper
-- sklearn-style `.fit()`, `.predict()`, `.score()` API
+## Main V0.7.0 capabilities
+
+- binary classification and symbolic regression;
+- multiclass OVR and `shared_softmax` symbolic learning;
+- NSGA-II-style Pareto ranking and compact final-model selection;
+- symbolic probability ensembles and ensemble distillation;
+- island evolution with migration and heterogeneous island profiles;
+- DAG compilation and common-subexpression compression;
+- bounded persistent LRU subtree cache;
+- NumPy/Numba postfix evaluator fallback when DAG execution is disabled;
+- `FastSymbolicTransformer` V2 with mRMR/diversity/Pareto selection;
+- checkpoint, resume, warm start, and checkpoint branching;
+- automatic presets and time/evaluation/memory budgets;
+- native missing-value primitives and robust-fitness perturbations;
+- local feature-occlusion explanations and experimental counterfactual search;
+- Python, C, C++, Java, Kotlin, and JavaScript source export;
+- inference latency and structural-cost profiling;
+- reproducible Publication Benchmark V3 with common saved folds and LaTeX tables;
+- a live island-grid terminal dashboard.
 
 ## Installation
 
-From the project root:
+From the release wheel:
 
-```bash
-python -m pip install -e .[dev]
+```bat
+python -m pip install fastsymbolicgp-0.7.0-py3-none-any.whl
+python -m fastsymbolicgp.cli
 ```
 
-## Quick binary classification example
+For optional Numba acceleration:
+
+```bat
+python -m pip install "fastsymbolicgp[acceleration]"
+```
+
+The source ZIP also includes `install_fastsymbolicgp_v070.bat`.
+
+## Binary classification with islands and the live dashboard
 
 ```python
-from sklearn.datasets import load_breast_cancer
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from fastsymbolicgp import FastSymbolicClassifier
 
-data = load_breast_cancer()
-X_train, X_test, y_train, y_test = train_test_split(
-    data.data, data.target, test_size=0.25, stratify=data.target, random_state=42
-)
-
-scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train)
-X_test = scaler.transform(X_test)
-
 model = FastSymbolicClassifier(
-    population_size=300,
-    generations=20,
-    max_depth=4,
+    population_size=32,
+    generations=120,
+    optimization="nsga2",
+    evolution_model="islands",
+    n_islands=4,
+    island_profiles=("accurate", "compact", "diverse", "robust"),
+    migration_interval=10,
+    prediction_mode="symbolic_ensemble",
+    ensemble_size=5,
+    subtree_cache=True,
+    dag_execution="auto",
+    probability_calibration="auto",
+    preset="balanced",
+    display="grid",
+    dashboard_interval=5,
     random_state=42,
 )
-
 model.fit(X_train, y_train)
-print(model.score(X_test, y_test))
-print(model.get_expression(feature_names=data.feature_names))
 ```
 
-## Regressor
+The report distinguishes the requested postfix evaluator from the actual execution path:
 
 ```python
-from fastsymbolicgp import FastSymbolicRegressor
-
-reg = FastSymbolicRegressor(population_size=300, generations=20, random_state=42)
-reg.fit(X_train, y_train)
-pred = reg.predict(X_test)
+print(model.evaluation_backend_)  # e.g. numba
+print(model.execution_engine_)    # e.g. dag_cached_numpy
 ```
 
-## Multiclass classifier
+## Shared-backbone multiclass model
 
 ```python
-from fastsymbolicgp import FastSymbolicMultiClassifier
-
-clf = FastSymbolicMultiClassifier(population_size=200, generations=15, random_state=42)
-clf.fit(X_train, y_train)
-pred = clf.predict(X_test)
+model = FastSymbolicClassifier(
+    multiclass_strategy="shared_softmax",
+    shared_n_components=8,
+    multiclass_calibration="temperature",
+    population_size=24,
+    generations=80,
+    optimization="nsga2",
+    random_state=42,
+)
+model.fit(X_train, y_train)
 ```
 
-## Ensemble classifier
+The model evolves a shared bank of symbolic features and trains one joint multinomial softmax head. OVR remains available through `multiclass_strategy="ovr"`.
+
+## Symbolic feature construction
 
 ```python
-from fastsymbolicgp import FastSymbolicEnsembleClassifier
+from fastsymbolicgp import FastSymbolicTransformer
 
-ens = FastSymbolicEnsembleClassifier(n_estimators=5, population_size=150, generations=10)
-ens.fit(X_train, y_train)
-pred = ens.predict(X_test)
+transformer = FastSymbolicTransformer(
+    n_components=12,
+    component_selection="mrmr",
+    max_correlation=0.90,
+    include_original_features=True,
+    model_params={"population_size": 30, "generations": 50, "verbose": 0},
+    random_state=42,
+)
+Z_train = transformer.fit_transform(X_train, y_train)
 ```
 
-## Export elite expressions
+## Distillation
 
 ```python
-model.save_elite_expressions("elite_expressions.csv", feature_names=data.feature_names, n=50)
+distilled = model.distill(
+    X_train,
+    max_nodes=35,
+    population_size=48,
+    generations=80,
+    verbose=0,
+)
 ```
 
-## Current status
+The distilled model learns the teacher's probability surface using one compact symbolic expression per required output.
 
-This is an alpha research library. It is suitable for experimentation, benchmarking, and continued development.
+## Native missing values and robust fitness
+
+```python
+model = FastSymbolicClassifier(
+    missing_value_strategy="native",
+    function_set=("add", "sub", "mul", "div", "is_missing", "coalesce"),
+    robustness_training=True,
+    robustness_method="combined",
+    robustness_weight=0.05,
+)
+```
+
+## Resource budgets
+
+```python
+model = FastSymbolicClassifier(
+    preset="auto",
+    time_budget=120,
+    evaluation_budget=1_000_000,
+    memory_budget_mb=2048,
+)
+```
+
+`stop_reason_` records whether evolution ended by maximum generations, early stopping, time budget, or evaluation budget.
+
+## Deployment export and profiling
+
+```python
+model.export_python("deployed_model.py")
+model.export_c("deployed_model.c")
+model.export_cpp("deployed_model.hpp")
+model.export_java("FastSymbolicModel.java")
+model.export_kotlin("FastSymbolicModel.kt")
+model.export_javascript("fast_symbolic_model.js")
+
+print(model.profile_prediction(X_test[:100], repeats=100))
+```
+
+Python export supports binary, multiclass OVR/shared-softmax, and regression. Portable C/C++/Java/Kotlin/JavaScript export supports binary classification and regression in V0.7.0.
+
+## Checkpoint branching
+
+```python
+compact_branch = model.branch(
+    parsimony_target_nodes=25,
+    generations=180,
+)
+compact_branch.continue_evolution(X_train, y_train, additional_generations=60)
+```
+
+## Publication Benchmark V3
+
+```bat
+fastsymbolicgp-benchmark ^
+  --datasets breast_cancer,iris,wine ^
+  --algorithms fastsymbolicgp,logistic,random_forest,hist_gradient_boosting,svm ^
+  --runs 6 ^
+  --folds 5 ^
+  --population-size 30 ^
+  --generations 120 ^
+  --islands 4 ^
+  --output-dir benchmark_v070_results
+```
+
+The benchmark stores common fold indices, raw and summary results, failures, expressions, environment data, algorithm ranks, and LaTeX-ready tables.
+
+## Stable versus experimental
+
+Stable in V0.7.0:
+
+- classifier, regressor, OVR/shared-softmax multiclass;
+- island evolution, DAG/cache, Pareto selection, ensembles;
+- transformer V2, distillation, checkpointing;
+- Python export, binary/regression portable exports;
+- benchmark framework and reporting.
+
+Experimental in V0.7.0:
+
+- `FastSymbolicNetworkClassifier`;
+- greedy counterfactual search;
+- adaptive population sizing and dynamic function weighting;
+- robustness fitness for deployment-hardening studies.
+
+These experimental components are implemented and tested but should be benchmarked carefully before strong scientific claims.

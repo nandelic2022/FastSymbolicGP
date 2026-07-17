@@ -1,15 +1,21 @@
-from .estimators.classifier import FastSymbolicClassifier
-from .estimators.regressor import FastSymbolicRegressor
-from .estimators.multiclass import FastSymbolicMultiClassifier
-from .ensemble.classifier import FastSymbolicEnsembleClassifier
-from .ensemble.regressor import FastSymbolicEnsembleRegressor
-
-__version__ = "0.2.0"
+"""FastSymbolicGP public API."""
+from ._version import __version__
+from .classifier import FastSymbolicClassifier
+from .regressor import FastSymbolicRegressor
+from .program import SymbolicProgram
+from .transformer import FastSymbolicTransformer
+from .network import FastSymbolicNetworkClassifier
+from .distillation import DistilledSymbolicClassifier
+from .interpretability import feature_stability, subexpression_stability
 
 __all__ = [
+    "__version__",
     "FastSymbolicClassifier",
     "FastSymbolicRegressor",
-    "FastSymbolicMultiClassifier",
-    "FastSymbolicEnsembleClassifier",
-    "FastSymbolicEnsembleRegressor",
+    "FastSymbolicTransformer",
+    "FastSymbolicNetworkClassifier",
+    "DistilledSymbolicClassifier",
+    "SymbolicProgram",
+    "feature_stability",
+    "subexpression_stability",
 ]
