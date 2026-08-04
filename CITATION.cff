@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use FastSymbolicGP in your research, please cite the associated publication."
+title: "FastSymbolicGP"
+type: software
+version: "0.7.0"
+
+authors:
+  - family-names: "Anđelić"
+    given-names: "Nikola"
+
+repository-code: "https://github.com/nandelic2022/FastSymbolicGP"
+url: "https://github.com/nandelic2022/FastSymbolicGP"
+license: "MIT"
+
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Anđelić"
+      given-names: "Nikola"
+  title: "FastSymbolicGP: A Lightweight Python Library for Efficient Symbolic Regression and Classification"
+  journal: "Inventions"
+  year: 2026
+  volume: 11
+  issue: "4"
+  start: "80"
+  doi: "10.3390/inventions11040080"
+  url: "https://doi.org/10.3390/inventions11040080"
