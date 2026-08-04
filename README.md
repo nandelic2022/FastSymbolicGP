@@ -1,5 +1,16 @@
 # FastSymbolicGP V0.7.0
 
+[![DOI](https://img.shields.io/badge/DOI-10.3390%2Finventions11040080-blue)](https://doi.org/10.3390/inventions11040080)
+[![PyPI](https://img.shields.io/pypi/v/fastsymbolicgp)](https://pypi.org/project/fastsymbolicgp/)
+[![Python](https://img.shields.io/pypi/pyversions/fastsymbolicgp)](https://pypi.org/project/fastsymbolicgp/)
+[![License](https://img.shields.io/github/license/nandelic2022/FastSymbolicGP)](https://github.com/nandelic2022/FastSymbolicGP/blob/main/LICENSE)
+
+FastSymbolicGP is the open-source implementation accompanying the peer-reviewed
+article published in *Inventions*:
+
+> Anđelić, N. (2026). FastSymbolicGP: A Lightweight Python Library for
+> Efficient Symbolic Regression and Classification. *Inventions*, 11(4), 80.
+> https://doi.org/10.3390/inventions11040080
 FastSymbolicGP is a scikit-learn-compatible symbolic machine-learning library for classification, regression, supervised symbolic feature construction, model distillation, and experimental symbolic networks.
 
 V0.7.0 is the **Scalable Symbolic Learning** release. It expands the V0.6.0 engine with island evolution, DAG execution, a persistent bounded subtree cache, shared-backbone multiclass learning, resource budgets, deployment export, model profiling, native missing-value operators, robustness objectives, and Publication Benchmark V3.
@@ -205,3 +216,20 @@ Experimental in V0.7.0:
 - robustness fitness for deployment-hardening studies.
 
 These experimental components are implemented and tested but should be benchmarked carefully before strong scientific claims.
+
+## Citation
+
+If FastSymbolicGP contributes to your research, please cite the following article:
+
+bibtex
+@article{Andelic2026FastSymbolicGP,
+  author         = {Anđelić, Nikola},
+  title          = {FastSymbolicGP: A Lightweight Python Library for Efficient
+                    Symbolic Regression and Classification},
+  journal        = {Inventions},
+  year           = {2026},
+  volume         = {11},
+  number         = {4},
+  article-number = {80},
+  doi            = {10.3390/inventions11040080}
+}
