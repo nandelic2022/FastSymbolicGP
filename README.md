@@ -233,3 +233,15 @@ bibtex
   article-number = {80},
   doi            = {10.3390/inventions11040080}
 }
+### APA citation
+
+Anđelić, N. (2026). FastSymbolicGP: A lightweight Python library for efficient
+symbolic regression and classification. *Inventions, 11*(4), 80.
+https://doi.org/10.3390/inventions11040080
+
+## Author
+
+**Nikola Anđelić**
+
+University of Rijeka, Faculty of Engineering  
+Department of Computer Engineering
