@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use FastSymbolicGP in your research, please cite the associated publication."
 title: "FastSymbolicGP"
 type: software
-version: "0.7.0"
+version: "1.0.0"
 
 authors:
   - family-names: "Anđelić"
