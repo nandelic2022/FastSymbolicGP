@@ -1,4 +1,4 @@
-"""Reproducible publication benchmark utilities for FastSymbolicGP V0.7.0."""
+"""Reproducible publication benchmark utilities for FastSymbolicGP V1.0.0."""
 from __future__ import annotations
 
 import csv

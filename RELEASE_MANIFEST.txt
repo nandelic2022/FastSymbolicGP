@@ -1,0 +1,20 @@
+FastSymbolicGP V1.0.0
+=====================
+Stable major release built directly from FastSymbolicGP V0.9.0.
+
+Core V1 additions:
+- exact validation champion archive and exact-consistent early stopping
+- stable preset semantics for explicit non-default overrides
+- workload-aware auto execution planner
+- persistent island thread pool
+- cached variation path indexing and flat compiled genome metadata
+- stable summary/profile/manifest/save/load helpers
+- JIT warmup API
+- optional deterministic champion constant refinement
+- Publication Benchmark V4 CLI evaluation-budget support
+- experimental namespace for symbolic-network APIs
+
+Validation:
+- 29 tests passed
+- clean wheel import passed
+- forced 120-generation Breast Cancer acceptance benchmark below 5 s on build host

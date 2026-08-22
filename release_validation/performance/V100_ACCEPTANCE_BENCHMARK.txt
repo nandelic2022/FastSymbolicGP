@@ -1,0 +1,3 @@
+V1.0.0 forced 120 generations: 3.8615 s
+Balanced accuracy: 0.957871
+{'version': '1.0.0', 'runtime_seconds': 3.8429920089999996, 'generations': 120, 'actual_program_evaluations': 6717, 'programs_per_second': 1747.8568740890662, 'fitness_cache_hits': 963, 'intra_population_reuse': 0, 'fitness_cache_hit_rate': 0.125390625, 'subtree_cache_hit_rate': 0.0, 'execution_engine': 'population_numba', 'fitness_engine': 'fused', 'best_nodes': 9, 'best_dag_nodes': 9, 'best_depth': 4, 'best_validation_fitness': 0.0367286563855773, 'stop_reason': 'max_generations'}

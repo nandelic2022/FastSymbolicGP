@@ -19,7 +19,7 @@ def small_classifier(**kwargs):
 
 
 def test_version_and_clone():
-    assert __version__ == "0.7.0"
+    assert __version__ == "1.0.0"
     assert isinstance(clone(small_classifier()), FastSymbolicClassifier)
 
 

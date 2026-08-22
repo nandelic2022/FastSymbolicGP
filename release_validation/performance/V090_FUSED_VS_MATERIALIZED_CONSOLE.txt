@@ -1,0 +1,86 @@
+{
+  "version": "0.9.0",
+  "configuration": {
+    "samples": 12000,
+    "features": 30,
+    "population": 64,
+    "generations": 5,
+    "repeats": 3,
+    "jobs": 4,
+    "output": "release_validation/performance/V090_FUSED_VS_MATERIALIZED.json"
+  },
+  "modes": {
+    "materialized": {
+      "classification": {
+        "times_seconds": [
+          0.3130131050002092,
+          0.27403459900006055,
+          0.275645693000115
+        ],
+        "median_seconds": 0.275645693000115,
+        "mean_seconds": 0.2875644656667949,
+        "minimum_seconds": 0.27403459900006055,
+        "score": 0.7009166666666666,
+        "nodes": 5,
+        "program_evaluations": 320,
+        "fitness_cache_hits": 0,
+        "execution_engine": "population_numba",
+        "fitness_engine": "materialized"
+      },
+      "regression": {
+        "times_seconds": [
+          0.32722242799991363,
+          0.31035914999984016,
+          0.4016827809996357
+        ],
+        "median_seconds": 0.32722242799991363,
+        "mean_seconds": 0.3464214529997965,
+        "minimum_seconds": 0.31035914999984016,
+        "score": 0.4785754680619423,
+        "nodes": 7,
+        "program_evaluations": 320,
+        "fitness_cache_hits": 0,
+        "execution_engine": "population_numba",
+        "fitness_engine": "materialized"
+      }
+    },
+    "fused": {
+      "classification": {
+        "times_seconds": [
+          0.2009403319998455,
+          0.18380998299971907,
+          0.17713357899992843
+        ],
+        "median_seconds": 0.18380998299971907,
+        "mean_seconds": 0.18729463133316435,
+        "minimum_seconds": 0.17713357899992843,
+        "score": 0.7185,
+        "nodes": 13,
+        "program_evaluations": 251,
+        "fitness_cache_hits": 69,
+        "execution_engine": "population_numba",
+        "fitness_engine": "fused"
+      },
+      "regression": {
+        "times_seconds": [
+          0.09101362000001245,
+          0.09186700899999778,
+          0.09080976299992471
+        ],
+        "median_seconds": 0.09101362000001245,
+        "mean_seconds": 0.09123013066664498,
+        "minimum_seconds": 0.09080976299992471,
+        "score": 0.4785436412453672,
+        "nodes": 7,
+        "program_evaluations": 259,
+        "fitness_cache_hits": 61,
+        "execution_engine": "population_numba",
+        "fitness_engine": "fused"
+      }
+    }
+  },
+  "speedup": {
+    "classification": 1.4996230808668116,
+    "regression": 3.5953127454975298
+  }
+}

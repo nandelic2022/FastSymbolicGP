@@ -27,6 +27,8 @@ def diagnose():
         "scikit_learn": sklearn.__version__,
         "numba": numba_version,
         "compiled_backend_available": NUMBA_AVAILABLE,
+        "default_execution_engine": "population_numba" if NUMBA_AVAILABLE else "postfix_numpy",
+        "default_fitness_engine": "fused" if NUMBA_AVAILABLE else "materialized",
         "features": {
             "binary_classification": True,
             "multiclass_ovr": True,
@@ -46,7 +48,17 @@ def diagnose():
             "robustness_fitness": True,
             "resource_budgets": True,
             "deployment_export": ["python", "c", "cpp", "java", "kotlin", "javascript"],
-            "publication_benchmark_v3": True,
+            "population_numba_execution": True,
+            "fused_population_fitness": True,
+            "exact_fitness_cache": True,
+            "duplicate_evaluation_reuse": True,
+            "elite_logistic_scaling": True,
+            "progressive_sampling": True,
+            "publication_benchmark_v4": True,
+            "exact_validation_champion": True,
+            "adaptive_execution_planner": True,
+            "stable_summary_and_manifest": True,
+            "constant_champion_optimization": True,
         },
         "status": "ok",
     }
@@ -54,18 +66,20 @@ def diagnose():
 
 
 def benchmark():
-    parser = argparse.ArgumentParser(description="FastSymbolicGP V0.7.0 publication benchmark V3")
+    parser = argparse.ArgumentParser(description="FastSymbolicGP V1.0.0 publication benchmark V4")
     parser.add_argument("--datasets", default="breast_cancer,iris,wine")
     parser.add_argument("--algorithms", default="fastsymbolicgp,logistic,random_forest,hist_gradient_boosting,svm")
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--population-size", type=int, default=30)
     parser.add_argument("--generations", type=int, default=120)
-    parser.add_argument("--backend", choices=["auto", "numba", "numpy"], default="auto")
+    parser.add_argument("--backend", choices=["auto", "population_numba", "numba", "numpy"], default="auto")
+    parser.add_argument("--fitness-engine", choices=["auto", "fused", "materialized"], default="auto")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output-dir", default="benchmark_v070_results")
+    parser.add_argument("--output-dir", default="benchmark_v100_results")
     parser.add_argument("--islands", type=int, default=1)
     parser.add_argument("--time-budget", type=float, default=None)
+    parser.add_argument("--evaluation-budget", type=int, default=None)
     args = parser.parse_args()
     run_publication_benchmark(
         output_dir=args.output_dir,
@@ -78,6 +92,8 @@ def benchmark():
             "evolution_model": "islands" if args.islands > 1 else "panmictic",
             "n_islands": args.islands,
             "time_budget": args.time_budget,
+            "evaluation_budget": args.evaluation_budget,
+            "fitness_engine": args.fitness_engine,
         },
     )
     print(f"Saved publication outputs to: {args.output_dir}")

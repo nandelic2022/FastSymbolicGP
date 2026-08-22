@@ -1,4 +1,4 @@
-"""Symbolic regressor for FastSymbolicGP V0.7.0."""
+"""Symbolic regressor for FastSymbolicGP V1.0.0."""
 from __future__ import annotations
 
 import numpy as np
@@ -6,9 +6,11 @@ from sklearn.base import RegressorMixin
 from sklearn.metrics import r2_score
 from sklearn.model_selection import train_test_split
 
+from .backend import score_population_regression_postfix
 from .base import BaseFastSymbolicGP
 from .metrics import fit_linear_scaler, regression_loss
 from .validation import check_X_y_finite
+from .constant_optimization import optimize_program_constants
 
 
 class FastSymbolicRegressor(RegressorMixin, BaseFastSymbolicGP):
@@ -53,7 +55,7 @@ class FastSymbolicRegressor(RegressorMixin, BaseFastSymbolicGP):
         elitism=2,
         hall_of_fame_size=50,
         duplicate_elimination=True,
-        semantic_duplicate_elimination=True,
+        semantic_duplicate_elimination=False,
         semantic_sample_size=128,
         max_duplicate_attempts=20,
         simplify_expression=True,
@@ -63,14 +65,17 @@ class FastSymbolicRegressor(RegressorMixin, BaseFastSymbolicGP):
         reject_oversized_offspring=True,
         tarpeian_rate=0.0,
         evaluation_cache=True,
-        subtree_cache=True,
+        fitness_cache_max_entries=100000,
+        fitness_cache_scope="run",
+        fitness_engine="auto",
+        subtree_cache=False,
         subtree_cache_scope="run",
         subtree_cache_max_mb=512,
         dag_execution="auto",
         complexity_measure="dag",
         evaluation_backend="auto",
         batch_size="auto",
-        n_jobs=1,
+        n_jobs=-1,
         thread_limit="auto",
         evolution_model="panmictic",
         n_islands=1,
@@ -95,6 +100,15 @@ class FastSymbolicRegressor(RegressorMixin, BaseFastSymbolicGP):
         robustness_noise=0.01,
         feature_dropout_rate=0.02,
         preset=None,
+        preset_override_policy="defaults_only",
+        execution_planner="auto",
+        exact_champion=True,
+        exact_champion_candidates=4,
+        deterministic=True,
+        profile_fit=True,
+        constant_optimization="off",
+        constant_optimization_rounds=2,
+        constant_optimization_scale=0.10,
         checkpoint_path=None,
         checkpoint_interval=0,
         resume_from_checkpoint=False,
@@ -136,7 +150,10 @@ class FastSymbolicRegressor(RegressorMixin, BaseFastSymbolicGP):
             operator_min_probability=operator_min_probability,
             reject_oversized_offspring=reject_oversized_offspring,
             tarpeian_rate=tarpeian_rate,
-            evaluation_cache=evaluation_cache, subtree_cache=subtree_cache,
+            evaluation_cache=evaluation_cache,
+            fitness_cache_max_entries=fitness_cache_max_entries,
+            fitness_cache_scope=fitness_cache_scope, fitness_engine=fitness_engine,
+            subtree_cache=subtree_cache,
             subtree_cache_scope=subtree_cache_scope,
             subtree_cache_max_mb=subtree_cache_max_mb,
             dag_execution=dag_execution, complexity_measure=complexity_measure,
@@ -158,7 +175,14 @@ class FastSymbolicRegressor(RegressorMixin, BaseFastSymbolicGP):
             robustness_weight=robustness_weight,
             robustness_noise=robustness_noise,
             feature_dropout_rate=feature_dropout_rate,
-            preset=preset, checkpoint_path=checkpoint_path,
+            preset=preset, preset_override_policy=preset_override_policy,
+            execution_planner=execution_planner, exact_champion=exact_champion,
+            exact_champion_candidates=exact_champion_candidates,
+            deterministic=deterministic, profile_fit=profile_fit,
+            constant_optimization=constant_optimization,
+            constant_optimization_rounds=constant_optimization_rounds,
+            constant_optimization_scale=constant_optimization_scale,
+            checkpoint_path=checkpoint_path,
             checkpoint_interval=checkpoint_interval,
             resume_from_checkpoint=resume_from_checkpoint,
             random_state=random_state, verbose=verbose, display=display,
@@ -191,6 +215,32 @@ class FastSymbolicRegressor(RegressorMixin, BaseFastSymbolicGP):
         metric = self.fitness_metric if self.metric is None else self.metric
         return regression_loss(y, program.scale_ * raw + program.intercept_, metric, sample_weight)
 
+    def _fused_score_population_numba(
+        self, population, X_train, y_train, X_val, y_val,
+        sample_weight_train, sample_weight_val, jobs,
+    ):
+        """Fused affine scaling and regression fitness without raw matrices."""
+        metric = self.fitness_metric if self.metric is None else self.metric
+        val_metric = metric if self.validation_metric is None else self.validation_metric
+        scales, intercepts, train_losses, val_losses = score_population_regression_postfix(
+            X_train, y_train, X_val, y_val, population,
+            metric=metric, validation_metric=val_metric,
+            scaling=self.fitness_scaling,
+            sample_weight_train=sample_weight_train,
+            sample_weight_val=sample_weight_val, n_jobs=jobs,
+        )
+        for index, program in enumerate(population):
+            program.scale_ = float(scales[index])
+            program.intercept_ = float(intercepts[index])
+            program.raw_fitness_ = float(train_losses[index])
+            program.validation_fitness_ = float(val_losses[index])
+            program.metadata_["fitness_scaling"] = str(self.fitness_scaling)
+            program.metadata_["evaluation_engine"] = "population_numba"
+            program.metadata_["fitness_engine"] = "fused"
+        self._scaling_exact_count_generation_ = 0
+        self._scaling_approx_count_generation_ = 0
+        return True
+
     def fit(self, X, y, sample_weight=None):
         feature_names = getattr(X, "columns", None)
         X, y = check_X_y_finite(
@@ -219,6 +269,38 @@ class FastSymbolicRegressor(RegressorMixin, BaseFastSymbolicGP):
             None if X_val is None else np.ascontiguousarray(X_val), y_val,
             sw_train, sw_val,
         )
+        mode_constant = str(self.constant_optimization).lower()
+        if mode_constant in {"champion", "auto"}:
+            metric = self.fitness_metric if self.metric is None else self.metric
+            val_metric = metric if self.validation_metric is None else self.validation_metric
+            def constant_objective(program):
+                raw_t = self._execute_program(program, X_train)
+                scale, intercept = fit_linear_scaler(raw_t, y_train, sw_train)
+                program.scale_, program.intercept_ = scale, intercept
+                program.raw_fitness_ = regression_loss(y_train, scale * raw_t + intercept, metric, sw_train)
+                if X_val is not None:
+                    raw_v = self._execute_program(program, X_val)
+                    program.validation_fitness_ = regression_loss(y_val, scale * raw_v + intercept, val_metric, sw_val)
+                else:
+                    program.validation_fitness_ = program.raw_fitness_
+                program.metadata_["fitness_scaling"] = "constant_optimized_exact_linear"
+                program.selection_fitness_ = self._selection_value(program)
+                return self._validation_value(program)
+            optimized, report = optimize_program_constants(
+                self.best_program_, constant_objective, self.const_range,
+                rounds=int(self.constant_optimization_rounds),
+                scale=float(self.constant_optimization_scale),
+            )
+            self.constant_optimization_report_ = report
+            if report.get("improved"):
+                self.best_program_ = optimized
+                self.best_raw_program_ = optimized.clone()
+                self.best_expression_ = self.best_program_.to_string(getattr(self, "feature_names_in_", None))
+                self.dag_statistics_ = self.best_program_.dag_stats()
+                self.feature_usage_ = self._build_feature_usage()
+                self.function_usage_ = self.best_program_.function_counts()
+        else:
+            self.constant_optimization_report_ = {"enabled": False, "improved": False}
         raw_train = self._execute_program(self.best_program_, X_train)
         self.scale_, self.intercept_ = fit_linear_scaler(raw_train, y_train, sw_train)
         self.best_program_.scale_, self.best_program_.intercept_ = self.scale_, self.intercept_

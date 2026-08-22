@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastsymbolicgp"
-version = "0.7.0"
-description = "Scalable symbolic learning with island evolution, DAG execution, shared multiclass models, distillation, and deployment export."
+version = "1.0.0"
+description = "Stable high-performance symbolic regression and classification with exact champion selection, adaptive execution planning, and fused Numba fitness."
 readme = "README.md"
 requires-python = ">=3.11"
-authors = [{name = "FastSymbolicGP contributors"}]
+authors = [{name = "Nikola Anđelić"}]
 dependencies = [
   "numpy>=1.24",
   "scikit-learn>=1.3",

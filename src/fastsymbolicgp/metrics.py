@@ -23,6 +23,38 @@ def resolve_class_weight(y: np.ndarray, class_weight) -> np.ndarray:
     return np.asarray([float(mapping.get(v, 1.0)) for v in y], dtype=float)
 
 
+def fit_logistic_scaler_approx(
+    raw: np.ndarray,
+    y: np.ndarray,
+    sample_weight: np.ndarray | None = None,
+    regularization: float = 1e-4,
+) -> tuple[float, float]:
+    """Fast one-step approximation to a univariate logistic scaler.
+
+    The approximation starts from the weighted class-prior intercept and uses
+    one Newton/Fisher step for the slope.  It requires only a few vector
+    reductions and is used to rank the complete population before exact
+    logistic refinement of elite programs.
+    """
+    x = np.asarray(raw, dtype=float)
+    yy = np.asarray(y, dtype=float)
+    w = np.ones_like(yy) if sample_weight is None else np.asarray(sample_weight, dtype=float)
+    weight_sum = float(np.sum(w))
+    if weight_sum <= 0:
+        return 1.0, 0.0
+    prior = float(np.clip(np.sum(w * yy) / weight_sum, 1e-8, 1.0 - 1e-8))
+    x_mean = float(np.sum(w * x) / weight_sum)
+    centred = x - x_mean
+    variance = float(np.sum(w * centred * centred))
+    if variance <= 1e-18:
+        return 0.0, float(np.log(prior / (1.0 - prior)))
+    covariance = float(np.sum(w * centred * (yy - prior)))
+    curvature = max(prior * (1.0 - prior), 1e-8) * variance + float(regularization)
+    scale = float(np.clip(covariance / curvature, -1e6, 1e6))
+    intercept = float(np.clip(np.log(prior / (1.0 - prior)) - scale * x_mean, -1e6, 1e6))
+    return scale, intercept
+
+
 def fit_logistic_scaler(raw: np.ndarray, y: np.ndarray, sample_weight: np.ndarray | None = None,
                         regularization: float = 1e-4, max_iter: int = 20,
                         initial: tuple[float, float] | None = None) -> tuple[float, float]:

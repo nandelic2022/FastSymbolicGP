@@ -1,0 +1,92 @@
+{
+  "benchmark": "FastSymbolicGP V0.8.0 versus V0.9.0 warmed comparison",
+  "configuration": {
+    "samples": 12000,
+    "features": 30,
+    "population_size": 64,
+    "generations": 5,
+    "n_jobs": 4,
+    "timed_repeats": 5,
+    "random_state": 7
+  },
+  "v080": {
+    "version": "0.8.0",
+    "classification": {
+      "times": [
+        0.31572433000019373,
+        0.2903256180002245,
+        0.27779465000003256,
+        0.2745089619997998,
+        0.2629316480001762
+      ],
+      "median": 0.27779465000003256,
+      "min": 0.2629316480001762,
+      "score": 0.7009166666666666,
+      "nodes": 5,
+      "evaluations": 320,
+      "engine": "legacy",
+      "cache_hits": 0
+    },
+    "regression": {
+      "times": [
+        0.4472757329999695,
+        0.34802597199995944,
+        0.33868763400005264,
+        0.33976409500019145,
+        0.304779008999958
+      ],
+      "median": 0.33976409500019145,
+      "min": 0.304779008999958,
+      "score": 0.4785754680619423,
+      "nodes": 7,
+      "evaluations": 320,
+      "engine": "legacy",
+      "cache_hits": 0
+    }
+  },
+  "v090": {
+    "version": "0.9.0",
+    "classification": {
+      "times": [
+        0.2512030129996674,
+        0.21572314800005188,
+        0.20134092600028453,
+        0.21244809300014822,
+        0.22603750899997976
+      ],
+      "median": 0.21572314800005188,
+      "min": 0.20134092600028453,
+      "score": 0.7185,
+      "nodes": 13,
+      "evaluations": 251,
+      "engine": "fused",
+      "cache_hits": 69
+    },
+    "regression": {
+      "times": [
+        0.24699972500002332,
+        0.1237526429999889,
+        0.12665458700030285,
+        0.10283059099992897,
+        0.09089643599963892
+      ],
+      "median": 0.1237526429999889,
+      "min": 0.09089643599963892,
+      "score": 0.4785436412453672,
+      "nodes": 7,
+      "evaluations": 259,
+      "engine": "fused",
+      "cache_hits": 61
+    }
+  },
+  "speedup": {
+    "classification": {
+      "factor": 1.2877368635468167,
+      "runtime_reduction_percent": 22.344383522135292
+    },
+    "regression": {
+      "factor": 2.7455098070125414,
+      "runtime_reduction_percent": 63.5768920786291
+    }
+  }
+}

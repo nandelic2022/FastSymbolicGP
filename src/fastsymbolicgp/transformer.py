@@ -1,4 +1,4 @@
-"""Supervised symbolic feature construction for FastSymbolicGP V0.7.0."""
+"""Supervised symbolic feature construction for FastSymbolicGP V0.9.0."""
 from __future__ import annotations
 
 import numpy as np

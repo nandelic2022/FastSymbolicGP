@@ -7,6 +7,7 @@ from .transformer import FastSymbolicTransformer
 from .network import FastSymbolicNetworkClassifier
 from .distillation import DistilledSymbolicClassifier
 from .interpretability import feature_stability, subexpression_stability
+from .warmup import warmup
 
 __all__ = [
     "__version__",
@@ -18,4 +19,5 @@ __all__ = [
     "SymbolicProgram",
     "feature_stability",
     "subexpression_stability",
+    "warmup",
 ]

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 from typing import Iterator, Sequence
 import copy
 import math
@@ -156,20 +157,58 @@ class SymbolicProgram:
         return self.compile_dag().statistics()
 
     def feature_counts(self) -> dict[int, int]:
+        cached = self.metadata_.get("_feature_counts")
+        if cached is not None:
+            return dict(cached)
         counts: dict[int, int] = {}
-        for _, node in self.root.iter_paths():
+        for _, node in self.indexed_nodes():
             if node.kind == "feature":
                 index = int(node.feature)
                 counts[index] = counts.get(index, 0) + 1
+        self.metadata_["_feature_counts"] = dict(counts)
         return counts
 
     def function_counts(self) -> dict[str, int]:
+        cached = self.metadata_.get("_function_counts")
+        if cached is not None:
+            return dict(cached)
         counts: dict[str, int] = {}
-        for _, node in self.root.iter_paths():
+        for _, node in self.indexed_nodes():
             if node.kind == "function":
                 name = str(node.name)
                 counts[name] = counts.get(name, 0) + 1
+        self.metadata_["_function_counts"] = dict(counts)
         return counts
+
+    def indexed_nodes(self):
+        """Return immutable path/node indexing cached for variation operations."""
+        cached = self.metadata_.get("_indexed_nodes")
+        if cached is None:
+            cached = tuple(self.root.iter_paths())
+            self.metadata_["_indexed_nodes"] = cached
+        return cached
+
+    def paths(self):
+        cached = self.metadata_.get("_paths")
+        if cached is None:
+            cached = tuple(path for path, _ in self.indexed_nodes())
+            self.metadata_["_paths"] = cached
+        return cached
+
+    def flat_genome(self) -> dict:
+        """Return the stable compiled flat genome used by the V1 execution core."""
+        cached = self.metadata_.get("_flat_genome")
+        if cached is None:
+            opcodes, arguments = self._compile_postfix()
+            cached = {
+                "opcodes": opcodes,
+                "arguments": arguments,
+                "size": int(self.size),
+                "depth": int(self.depth),
+                "execution_hash": self.execution_hash(),
+            }
+            self.metadata_["_flat_genome"] = cached
+        return cached
 
     def execute(self, X: np.ndarray, backend: str = "numpy") -> np.ndarray:
         if str(backend).lower() == "tree":
@@ -189,6 +228,22 @@ class SymbolicProgram:
             cached = self.to_string(precision=12)
             self.metadata_["_structural_hash"] = cached
         return cached
+
+    def execution_hash(self) -> str:
+        """Exact hash of compiled opcodes and IEEE-754 arguments.
+
+        Unlike the human-readable structural hash, this key does not round
+        ephemeral constants and is therefore safe for exact fitness reuse.
+        """
+        cached = self.metadata_.get("_execution_hash")
+        if cached is None:
+            opcodes, arguments = self._compile_postfix()
+            digest = hashlib.blake2b(digest_size=16)
+            digest.update(np.ascontiguousarray(opcodes).view(np.uint8))
+            digest.update(np.ascontiguousarray(arguments).view(np.uint8))
+            cached = digest.hexdigest()
+            self.metadata_["_execution_hash"] = cached
+        return str(cached)
 
 
 def random_terminal(rng: np.random.Generator, n_features: int, const_range: tuple[float, float], const_probability: float) -> Node:
@@ -232,8 +287,8 @@ def random_tree(
 
 
 def subtree_crossover(a: SymbolicProgram, b: SymbolicProgram, rng: np.random.Generator) -> SymbolicProgram:
-    a_paths = [p for p, _ in a.root.iter_paths()]
-    b_nodes = [n for _, n in b.root.iter_paths()]
+    a_paths = a.paths()
+    b_nodes = tuple(n for _, n in b.indexed_nodes())
     path = a_paths[int(rng.integers(0, len(a_paths)))]
     donor = b_nodes[int(rng.integers(0, len(b_nodes)))]
     return SymbolicProgram(a.root.replace_path(path, donor))
@@ -249,7 +304,7 @@ def subtree_mutation(
     const_probability: float,
     function_weights: dict[str, float] | None = None,
 ) -> SymbolicProgram:
-    paths = [p for p, _ in program.root.iter_paths()]
+    paths = program.paths()
     path = paths[int(rng.integers(0, len(paths)))]
     min_d, max_d = mutation_depth
     replacement = random_tree(
@@ -260,9 +315,10 @@ def subtree_mutation(
 
 
 def hoist_mutation(program: SymbolicProgram, rng: np.random.Generator) -> SymbolicProgram:
-    all_nodes = [(p, n) for p, n in program.root.iter_paths()]
+    all_nodes = program.indexed_nodes()
     path, subtree = all_nodes[int(rng.integers(0, len(all_nodes)))]
-    descendants = [n for _, n in subtree.iter_paths()]
+    prefix_len = len(path)
+    descendants = [n for p, n in all_nodes if len(p) >= prefix_len and p[:prefix_len] == path]
     replacement = descendants[int(rng.integers(0, len(descendants)))]
     return SymbolicProgram(program.root.replace_path(path, replacement))
 
@@ -275,9 +331,8 @@ def point_mutation(
     const_range: tuple[float, float],
     function_weights: dict[str, float] | None = None,
 ) -> SymbolicProgram:
+    path = program.paths()[int(rng.integers(0, len(program.paths())))]
     root = program.root.clone()
-    paths_nodes = list(root.iter_paths())
-    path, node = paths_nodes[int(rng.integers(0, len(paths_nodes)))]
     target = root.get_path(path)
     if target.kind == "feature":
         target.feature = int(rng.integers(0, n_features))

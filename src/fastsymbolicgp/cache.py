@@ -1,4 +1,4 @@
-"""Thread-safe bounded caches used by the V0.7.0 DAG evaluator."""
+"""Thread-safe bounded caches used by the V0.9.0 DAG evaluator."""
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -119,3 +119,64 @@ def dataset_token(X: np.ndarray) -> tuple:
         sample = np.ascontiguousarray(flat[idx])
     fingerprint = hashlib.blake2b(sample.view(np.uint8), digest_size=8).hexdigest()
     return (pointer, tuple(arr.shape), tuple(arr.strides), str(arr.dtype), fingerprint)
+
+class MetadataLRUCache:
+    """Thread-safe bounded LRU cache for small immutable Python snapshots.
+
+    V0.9.0 uses this cache for exact fitness reuse. Unlike ``ArrayLRUCache``,
+    entries contain scalar model state rather than prediction arrays, so the
+    capacity is controlled by entry count instead of bytes.
+    """
+
+    def __init__(self, max_entries: int = 100_000):
+        self.max_entries = max(0, int(max_entries))
+        self._items: OrderedDict[Hashable, object] = OrderedDict()
+        self._lock = RLock()
+        self._stats = CacheStatistics()
+
+    def get(self, key: Hashable):
+        if self.max_entries <= 0:
+            return None
+        with self._lock:
+            value = self._items.get(key)
+            if value is None:
+                self._stats.misses += 1
+                return None
+            self._items.move_to_end(key)
+            self._stats.hits += 1
+            return value
+
+    def set(self, key: Hashable, value):
+        if self.max_entries <= 0:
+            return
+        with self._lock:
+            self._items.pop(key, None)
+            while self._items and len(self._items) >= self.max_entries:
+                self._items.popitem(last=False)
+                self._stats.evictions += 1
+            self._items[key] = value
+            self._stats.entries = len(self._items)
+
+    def clear(self):
+        with self._lock:
+            self._items.clear()
+            self._stats.entries = 0
+
+    def statistics(self) -> dict:
+        with self._lock:
+            self._stats.entries = len(self._items)
+            return self._stats.as_dict()
+
+    def __getstate__(self):
+        with self._lock:
+            return {
+                "max_entries": self.max_entries,
+                "items": list(self._items.items()),
+                "stats": self._stats,
+            }
+
+    def __setstate__(self, state):
+        self.max_entries = int(state.get("max_entries", 0))
+        self._items = OrderedDict(state.get("items", []))
+        self._stats = state.get("stats", CacheStatistics())
+        self._lock = RLock()

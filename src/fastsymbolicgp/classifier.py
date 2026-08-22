@@ -1,4 +1,4 @@
-"""Symbolic binary and multiclass classifiers for FastSymbolicGP V0.7.0."""
+"""High-performance symbolic classifiers for FastSymbolicGP V1.0.0."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,6 +11,8 @@ from sklearn.metrics import accuracy_score, log_loss
 from sklearn.model_selection import train_test_split
 from sklearn.utils.validation import check_is_fitted
 
+from ._version import __version__
+from .backend import execute_population_postfix, score_population_classification_postfix
 from .base import BaseFastSymbolicGP
 from .calibration import (
     TemperatureScaler, apply_calibrator, expected_calibration_error,
@@ -18,10 +20,11 @@ from .calibration import (
 )
 from .history import save_json
 from .metrics import (
-    classification_loss, fit_logistic_scaler, optimize_threshold,
+    classification_loss, fit_logistic_scaler, fit_logistic_scaler_approx, optimize_threshold,
     probability_from_raw, resolve_class_weight,
 )
 from .validation import check_X_y_finite
+from .constant_optimization import optimize_program_constants
 
 
 def _project_simplex(v):
@@ -77,7 +80,7 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
         link_function="sigmoid",
         fitness_scaling="elite_logistic",
         fitness_scaling_top_k=12,
-        fitness_scaling_interval=1,
+        fitness_scaling_interval=2,
         fitness_scaling_regularization=1e-4,
         fitness_scaling_warm_start=True,
         fitness_scaling_fallback="rank",
@@ -109,7 +112,7 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
         elitism=2,
         hall_of_fame_size=50,
         duplicate_elimination=True,
-        semantic_duplicate_elimination=True,
+        semantic_duplicate_elimination=False,
         semantic_sample_size=128,
         max_duplicate_attempts=20,
         simplify_expression=True,
@@ -119,14 +122,17 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
         reject_oversized_offspring=True,
         tarpeian_rate=0.0,
         evaluation_cache=True,
-        subtree_cache=True,
+        fitness_cache_max_entries=100000,
+        fitness_cache_scope="run",
+        fitness_engine="auto",
+        subtree_cache=False,
         subtree_cache_scope="run",
         subtree_cache_max_mb=512,
         dag_execution="auto",
         complexity_measure="dag",
         evaluation_backend="auto",
         batch_size="auto",
-        n_jobs=1,
+        n_jobs=-1,
         thread_limit="auto",
         evolution_model="panmictic",
         n_islands=1,
@@ -151,6 +157,15 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
         robustness_noise=0.01,
         feature_dropout_rate=0.02,
         preset=None,
+        preset_override_policy="defaults_only",
+        execution_planner="auto",
+        exact_champion=True,
+        exact_champion_candidates=4,
+        deterministic=True,
+        profile_fit=True,
+        constant_optimization="off",
+        constant_optimization_rounds=2,
+        constant_optimization_scale=0.10,
         checkpoint_path=None,
         checkpoint_interval=0,
         resume_from_checkpoint=False,
@@ -192,7 +207,10 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
             operator_min_probability=operator_min_probability,
             reject_oversized_offspring=reject_oversized_offspring,
             tarpeian_rate=tarpeian_rate,
-            evaluation_cache=evaluation_cache, subtree_cache=subtree_cache,
+            evaluation_cache=evaluation_cache,
+            fitness_cache_max_entries=fitness_cache_max_entries,
+            fitness_cache_scope=fitness_cache_scope, fitness_engine=fitness_engine,
+            subtree_cache=subtree_cache,
             subtree_cache_scope=subtree_cache_scope,
             subtree_cache_max_mb=subtree_cache_max_mb,
             dag_execution=dag_execution, complexity_measure=complexity_measure,
@@ -214,7 +232,14 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
             robustness_weight=robustness_weight,
             robustness_noise=robustness_noise,
             feature_dropout_rate=feature_dropout_rate,
-            preset=preset, checkpoint_path=checkpoint_path,
+            preset=preset, preset_override_policy=preset_override_policy,
+            execution_planner=execution_planner, exact_champion=exact_champion,
+            exact_champion_candidates=exact_champion_candidates,
+            deterministic=deterministic, profile_fit=profile_fit,
+            constant_optimization=constant_optimization,
+            constant_optimization_rounds=constant_optimization_rounds,
+            constant_optimization_scale=constant_optimization_scale,
+            checkpoint_path=checkpoint_path,
             checkpoint_interval=checkpoint_interval,
             resume_from_checkpoint=resume_from_checkpoint,
             random_state=random_state, verbose=verbose, display=display,
@@ -250,12 +275,13 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
     # ----------------------------- fitness -----------------------------
     def _score_program(self, program, raw_train, y_train, raw_val, y_val, sw_train, sw_val):
         metric = self.fitness_metric if self.metric is None else self.metric
-        if self.fitness_scaling in {"elite_logistic", "logistic", "auto"}:
+        mode = str(self.fitness_scaling).lower() if self.fitness_scaling is not None else "none"
+        if mode in {"elite_logistic", "logistic", "exact_logistic", "auto"}:
             scale, intercept = fit_logistic_scaler(
                 raw_train, y_train, sw_train,
                 regularization=float(self.fitness_scaling_regularization), max_iter=15,
             )
-        elif self.fitness_scaling in {None, "none", "identity"}:
+        elif mode in {"none", "identity", "fixed_sigmoid", "fixed"}:
             scale, intercept = 1.0, 0.0
         else:
             raise ValueError(f"Unsupported fitness_scaling: {self.fitness_scaling}")
@@ -274,6 +300,191 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
         metric = self.fitness_metric if self.metric is None else self.metric
         proba = probability_from_raw(raw, program.scale_, program.intercept_)
         return classification_loss(y, proba, metric, sample_weight)
+
+    def _fused_score_population_numba(
+        self, population, X_train, y_train, X_val, y_val,
+        sample_weight_train, sample_weight_val, jobs,
+    ):
+        """Score common binary metrics inside the compiled population kernel."""
+        metric = self.fitness_metric if self.metric is None else self.metric
+        val_metric = metric if self.validation_metric is None else self.validation_metric
+        mode = str(self.fitness_scaling).lower() if self.fitness_scaling is not None else "none"
+        if mode in {"logistic", "exact_logistic"}:
+            return False
+        if mode in {"elite_logistic", "auto"}:
+            fused_scaling = "approx_logistic"
+            label = "approx_logistic"
+        elif mode in {"none", "identity", "fixed_sigmoid", "fixed"}:
+            fused_scaling = "fixed_sigmoid"
+            label = "fixed_sigmoid"
+        else:
+            return False
+        scales, intercepts, train_losses, val_losses = score_population_classification_postfix(
+            X_train, y_train, X_val, y_val, population,
+            metric=metric, validation_metric=val_metric,
+            scaling=fused_scaling,
+            regularization=float(self.fitness_scaling_regularization),
+            sample_weight_train=sample_weight_train,
+            sample_weight_val=sample_weight_val, n_jobs=jobs,
+        )
+        for index, program in enumerate(population):
+            program.scale_ = float(scales[index])
+            program.intercept_ = float(intercepts[index])
+            program.raw_fitness_ = float(train_losses[index])
+            program.validation_fitness_ = float(val_losses[index])
+            program.metadata_["fitness_scaling"] = label
+            program.metadata_["evaluation_engine"] = "population_numba"
+            program.metadata_["fitness_engine"] = "fused"
+        self._scaling_exact_count_generation_ = 0
+        self._scaling_approx_count_generation_ = len(population)
+        return True
+
+    def _score_population(
+        self, population, raw_train, y_train, raw_val, y_val,
+        sample_weight_train, sample_weight_val,
+    ):
+        """Population-aware classification scoring for V0.9.0.
+
+        ``elite_logistic`` now does what its name promises: every program is
+        ranked using a one-step scaler, while only the best ``top_k`` programs
+        receive the iterative exact scaler on configured generations.
+        """
+        metric = self.fitness_metric if self.metric is None else self.metric
+        val_metric = metric if self.validation_metric is None else self.validation_metric
+        mode = str(self.fitness_scaling).lower() if self.fitness_scaling is not None else "none"
+
+        def apply_score(index, scale, intercept, label):
+            program = population[index]
+            program.scale_, program.intercept_ = float(scale), float(intercept)
+            train_proba = probability_from_raw(raw_train[index], scale, intercept)
+            program.raw_fitness_ = classification_loss(
+                y_train, train_proba, metric, sample_weight_train,
+            )
+            if raw_val is not None:
+                val_proba = probability_from_raw(raw_val[index], scale, intercept)
+                program.validation_fitness_ = classification_loss(
+                    y_val, val_proba, val_metric, sample_weight_val,
+                )
+            else:
+                program.validation_fitness_ = program.raw_fitness_
+            program.metadata_["fitness_scaling"] = label
+
+        if mode in {"none", "identity", "fixed_sigmoid", "fixed"}:
+            for index in range(len(population)):
+                apply_score(index, 1.0, 0.0, "fixed_sigmoid")
+            self._scaling_exact_count_generation_ = 0
+            self._scaling_approx_count_generation_ = len(population)
+            return population
+
+        if mode in {"logistic", "exact_logistic"}:
+            for index in range(len(population)):
+                scale, intercept = fit_logistic_scaler(
+                    raw_train[index], y_train, sample_weight_train,
+                    regularization=float(self.fitness_scaling_regularization), max_iter=15,
+                )
+                apply_score(index, scale, intercept, "exact_logistic")
+            self._scaling_exact_count_generation_ = len(population)
+            self._scaling_approx_count_generation_ = 0
+            return population
+
+        if mode not in {"elite_logistic", "auto"}:
+            raise ValueError(
+                "fitness_scaling must be elite_logistic, exact_logistic, fixed_sigmoid, or none"
+            )
+
+        # Fast approximate pass over the complete batch.
+        for index in range(len(population)):
+            scale, intercept = fit_logistic_scaler_approx(
+                raw_train[index], y_train, sample_weight_train,
+                regularization=float(self.fitness_scaling_regularization),
+            )
+            apply_score(index, scale, intercept, "approx_logistic")
+
+        if bool(getattr(self, "_defer_elite_refinement_", False)):
+            self._scaling_exact_count_generation_ = 0
+            self._scaling_approx_count_generation_ = len(population)
+            return population
+
+        generation = int(getattr(self, "_current_generation_", 1))
+        interval = max(1, int(self.fitness_scaling_interval))
+        refine_now = generation == 1 or generation % interval == 0
+        top_k = min(len(population), max(0, int(self.fitness_scaling_top_k)))
+        exact_indices = []
+        if refine_now and top_k > 0:
+            provisional = sorted(
+                range(len(population)),
+                key=lambda index: (
+                    self._selection_value(population[index]),
+                    self._complexity(population[index]),
+                    population[index].depth,
+                ),
+            )
+            exact_indices = provisional[:top_k]
+            for index in exact_indices:
+                scale, intercept = fit_logistic_scaler(
+                    raw_train[index], y_train, sample_weight_train,
+                    regularization=float(self.fitness_scaling_regularization), max_iter=15,
+                )
+                apply_score(index, scale, intercept, "elite_exact_logistic")
+
+        self._scaling_exact_count_generation_ = len(exact_indices)
+        self._scaling_approx_count_generation_ = len(population) - len(exact_indices)
+        return population
+
+    def _refine_population_elites(
+        self, population, X_reference, train_end, y_train, y_val,
+        sample_weight_train, sample_weight_val, jobs,
+    ):
+        """Exactly rescale globally selected elites after batched evaluation."""
+        mode = str(self.fitness_scaling).lower() if self.fitness_scaling is not None else "none"
+        if mode not in {"elite_logistic", "auto"}:
+            return False
+        generation = int(getattr(self, "_current_generation_", 1))
+        interval = max(1, int(self.fitness_scaling_interval))
+        refine_now = generation == 1 or generation % interval == 0
+        configured_top_k = min(len(population), max(0, int(self.fitness_scaling_top_k)))
+        champion_k = min(len(population), max(1, int(self.exact_champion_candidates))) if bool(self.exact_champion) else 0
+        top_k = configured_top_k if refine_now else champion_k
+        if top_k <= 0:
+            self._scaling_exact_count_generation_ = 0
+            self._scaling_approx_count_generation_ = len(population)
+            return True
+
+        indices = sorted(
+            range(len(population)),
+            key=lambda index: (
+                self._selection_value(population[index]),
+                self._complexity(population[index]),
+                population[index].depth,
+            ),
+        )[:top_k]
+        elites = [population[index] for index in indices]
+        raw_all = execute_population_postfix(X_reference, elites, n_jobs=jobs)
+        metric = self.fitness_metric if self.metric is None else self.metric
+        val_metric = metric if self.validation_metric is None else self.validation_metric
+        for row, program in enumerate(elites):
+            raw_train = raw_all[row, :train_end]
+            raw_val = None if y_val is None else raw_all[row, train_end:]
+            scale, intercept = fit_logistic_scaler(
+                raw_train, y_train, sample_weight_train,
+                regularization=float(self.fitness_scaling_regularization), max_iter=15,
+            )
+            program.scale_, program.intercept_ = scale, intercept
+            train_proba = probability_from_raw(raw_train, scale, intercept)
+            program.raw_fitness_ = classification_loss(
+                y_train, train_proba, metric, sample_weight_train,
+            )
+            if raw_val is not None:
+                val_proba = probability_from_raw(raw_val, scale, intercept)
+                program.validation_fitness_ = classification_loss(
+                    y_val, val_proba, val_metric, sample_weight_val,
+                )
+            else:
+                program.validation_fitness_ = program.raw_fitness_
+            program.metadata_["fitness_scaling"] = "elite_exact_logistic"
+        self._scaling_exact_count_generation_ = len(elites)
+        self._scaling_approx_count_generation_ = len(population) - len(elites)
+        return True
 
     # ----------------------------- fitting -----------------------------
     def fit(self, X, y, sample_weight=None):
@@ -331,7 +542,7 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
         total_runtime = 0.0
         if int(self.verbose) > 0:
             print("\n╔" + "═" * 104 + "╗")
-            title = f" FASTSYMBOLICGP 0.7.0 // {self.multiclass_strategy_.upper()} // {len(self.classes_)} CLASS SYMBOLIC SYSTEM "
+            title = f" FASTSYMBOLICGP {__version__} // {self.multiclass_strategy_.upper()} // {len(self.classes_)} CLASS SYMBOLIC SYSTEM "
             print("║" + title.center(104) + "║")
             print("╚" + "═" * 104 + "╝")
         for index, class_label in enumerate(self.classes_):
@@ -459,6 +670,45 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
             None if X_val is None else np.ascontiguousarray(X_val), y_val,
             sw_train, sw_val,
         )
+        mode_constant = str(self.constant_optimization).lower()
+        if mode_constant in {"champion", "auto"}:
+            metric = self.fitness_metric if self.metric is None else self.metric
+            val_metric = metric if self.validation_metric is None else self.validation_metric
+            def constant_objective(program):
+                raw_t = self._execute_program(program, X_train)
+                scale, intercept = fit_logistic_scaler(
+                    raw_t, y_train, sw_train,
+                    regularization=float(self.fitness_scaling_regularization), max_iter=20,
+                )
+                program.scale_, program.intercept_ = scale, intercept
+                program.raw_fitness_ = classification_loss(
+                    y_train, probability_from_raw(raw_t, scale, intercept), metric, sw_train,
+                )
+                if X_val is not None:
+                    raw_v = self._execute_program(program, X_val)
+                    program.validation_fitness_ = classification_loss(
+                        y_val, probability_from_raw(raw_v, scale, intercept), val_metric, sw_val,
+                    )
+                else:
+                    program.validation_fitness_ = program.raw_fitness_
+                program.metadata_["fitness_scaling"] = "constant_optimized_exact_logistic"
+                program.selection_fitness_ = self._selection_value(program)
+                return self._validation_value(program)
+            optimized, report = optimize_program_constants(
+                self.best_program_, constant_objective, self.const_range,
+                rounds=int(self.constant_optimization_rounds),
+                scale=float(self.constant_optimization_scale),
+            )
+            self.constant_optimization_report_ = report
+            if report.get("improved"):
+                self.best_program_ = optimized
+                self.best_raw_program_ = optimized.clone()
+                self.best_expression_ = self.best_program_.to_string(getattr(self, "feature_names_in_", None))
+                self.dag_statistics_ = self.best_program_.dag_stats()
+                self.feature_usage_ = self._build_feature_usage()
+                self.function_usage_ = self.best_program_.function_counts()
+        else:
+            self.constant_optimization_report_ = {"enabled": False, "improved": False}
         raw_train = self._execute_program(self.best_program_, X_train)
         self.scale_, self.intercept_ = fit_logistic_scaler(
             raw_train, y_train, sw_train,
@@ -825,7 +1075,7 @@ class FastSymbolicClassifier(ClassifierMixin, BaseFastSymbolicGP):
             save_json(payload, path)
             return
         payload = {
-            "version": "0.7.0", "estimator": self.__class__.__name__,
+            "version": __version__, "estimator": self.__class__.__name__,
             "multiclass_strategy": self.multiclass_strategy_,
             "evaluation_backend": getattr(self.estimators_[0], "evaluation_backend_", self.evaluation_backend),
             "execution_engine": getattr(self.estimators_[0], "execution_engine_", "unknown"),
