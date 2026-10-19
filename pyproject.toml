@@ -1,14 +1,16 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastsymbolicgp"
-version = "1.0.0"
-description = "Stable high-performance symbolic regression and classification with exact champion selection, adaptive execution planning, and fused Numba fitness."
+version = "1.2.8"
+description = "Scientific symbolic machine learning with constraints, units, lexicase selection, Pareto search, uncertainty, and sklearn compatibility."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "Nikola Anđelić"}]
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
   "numpy>=1.24",
   "scikit-learn>=1.3",
@@ -18,14 +20,24 @@ dependencies = [
 
 [project.optional-dependencies]
 acceleration = ["numba>=0.58"]
-dev = ["pytest>=7", "pandas>=2", "build>=1"]
+science = ["scipy>=1.10", "sympy>=1.12", "pandas>=2.0", "matplotlib>=3.7"]
+dev = ["pytest>=7", "pandas>=2.0", "build>=1"]
+all = ["numba>=0.58", "scipy>=1.10", "sympy>=1.12", "pandas>=2.0", "matplotlib>=3.7"]
 
 [project.scripts]
 fastsymbolicgp-diagnose = "fastsymbolicgp.cli:diagnose"
+fastsymbolicgp-self-test = "fastsymbolicgp.cli:self_test"
+fastsymbolicgp-fit = "fastsymbolicgp.cli:fit_csv"
 fastsymbolicgp-benchmark = "fastsymbolicgp.cli:benchmark"
+fastsymbolicgp-certify = "fastsymbolicgp.cli:certify"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/nandelic2022/FastSymbolicGP"
+Repository = "https://github.com/nandelic2022/FastSymbolicGP"
+

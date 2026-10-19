@@ -1,144 +1,330 @@
-# FastSymbolicGP V1.0.0
+# FastSymbolicGP
 
-FastSymbolicGP is a scikit-learn-compatible symbolic machine-learning library for fast symbolic classification, regression, symbolic feature construction, distillation, and deployment export.
+**Current release: 1.2.8** · Python 3.11+ · [GitHub](https://github.com/nandelic2022/FastSymbolicGP) · [PyPI](https://pypi.org/project/fastsymbolicgp/)
 
-V1.0.0 is the first **stable API release**. It consolidates the V0.9.0 fused Numba engine with exact champion selection, adaptive execution planning, stable preset semantics, richer performance telemetry, cached program indexing, optional final constant refinement, and publication-grade reproducibility controls.
+## V1.2.8 — Batched Tournament Scheduler
 
-## Installation
+V1.2.8 accelerates the standard scalar+tournament path with a vectorized exact-distribution tournament scheduler, while retaining the Numba-first rootless genome engine, fused regression scoring, scientific constraints, unit-aware GP, publication tooling, and expression simplification from prior releases.
 
-```bat
-python -m pip install fastsymbolicgp-1.0.0-py3-none-any.whl
-python -m pip install numba
-```
+For the fastest standard regression path use built-in primitives, `evaluation_backend="numba"`, `fitness_engine="fused"`, and `optimization="scalar"`.
 
-## Minimal Spyder example
+
+## V1.2.7 Numba-first rootless fast path
+
+For the standard scalar+tournament workflow, FastSymbolicGP now evolves postfix genomes without keeping a Python tree for every candidate. Numba analyzes genome topology, while crossover/mutation operate directly on postfix arrays. The final champion is materialized back to the normal symbolic tree before public inspection/export.
+
+After fitting:
 
 ```python
-from sklearn.datasets import load_breast_cancer
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import balanced_accuracy_score
-from fastsymbolicgp import FastSymbolicClassifier
+print(model.profile_["variation_engine"])
+# numba_rootless_genome_v2
+```
 
-X, y = load_breast_cancer(return_X_y=True)
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.30, random_state=42, stratify=y
-)
+Scientific constraints, unit-aware typed GP, Semantic GP, memetic search and evolution-time algebraic simplification automatically use the safe tree-backed path.
 
-model = FastSymbolicClassifier(
-    population_size=64,
-    generations=120,
-    preset="balanced",
+An optional `examples/benchmark_vs_gplearn.py` script is included for local speed/quality comparison when gplearn is installed.
+
+
+## V1.2.6 fast path
+
+The standard scalar+tournament workflow can now inherit the exact postfix genome during crossover/mutation instead of recompiling each offspring tree before fused Numba evaluation. Inspect it with:
+
+```python
+print(model.profile_["variation_engine"])
+# flat_genome_inheritance_v1
+```
+
+This optimization preserves the tree representation for equations, scientific constraints, serialization and explainability.
+
+
+## V1.2.4 — Expression Quality & Simplification
+
+V1.2.4 keeps the V1.2.3 ultra-fast search core and focuses on equation quality. The default final regressor pass performs empirically certified pruning: candidate rewrites are accepted only when the fitted predictions remain numerically equivalent on the model-development reference set. `preset="publication"` deliberately resolves to globally safe simplification only.
+
+New public APIs include `get_raw_expression()`, a corrected `get_expression()` that includes the fitted affine scale/intercept, `get_simplification_report()`, `safe_simplify_program()`, and `certified_simplify_program()`. `verbose=2` now reports every generation with a compact progress line; `verbose=1` keeps periodic output.
+
+FastSymbolicGP is a scikit-learn-style symbolic machine-learning library for symbolic regression, classification, scientific constraints, physical-unit-aware search, uncertainty, reproducibility, and high-throughput CPU execution.
+
+
+
+## V1.2.3 — Ultra-Fast Quality-Preserving Core
+
+V1.2.3 keeps the search behavior scientifically useful while removing more evaluator overhead. For MSE/RMSE/R2 objectives, the fused Numba kernel now computes the exact scaled training loss from first-pass sufficient statistics, eliminating the second symbolic-expression pass over the training split. Population genomes are packed with NumPy array concatenation rather than per-node Python list expansion, and Numba compile-cache checks use immutable root identity instead of repeatedly computing structural hashes.
+
+The standard scalar/tournament path now uses a quality-preserving fast tournament: it retains true without-replacement tournament sampling while exploiting the fact that the population is already fitness-sorted, avoiding candidate-list allocation and repeated winner comparisons. Scientific constraints, typed GP, Semantic GP, Pareto/NSGA-II and checkpoint behavior remain available through their safe generic paths.
+
+On the bundled runtime, the 500-population × 100-generation Diabetes benchmark after JIT warm-up completed in roughly **11–13 s** across repeated certification runs. The final clean-wheel run was **12.99 s** and achieved **test R2 = 0.46235** and **RMSE = 53.37**, versus **R2 = 0.45260** for scikit-learn `LinearRegression` on the same split. These are workload-specific measurements, not universal performance or accuracy guarantees.
+
+## V1.2.2 — Fast Variation Engine Hotfix
+
+V1.2.2 targets the dominant bottleneck found by profiling the 500-population × 100-generation Diabetes benchmark. It keeps the V1.2.1 fused-Numba/scalar fast path and substantially reduces Python-side variation overhead through zero-copy tournament handling, bulk tournament schedules, persistent-tree structural sharing, cached immutable paths, single-pass size/depth statistics, fast basic admissibility checks, and cheap terminal evolution snapshots. Internal DataFrame/NumPy transitions no longer emit the sklearn feature-name warning seen in V1.2.1.
+
+On the bundled runtime, the exact 500×100 four-operator Diabetes speed test completed in about **10.1 s** after JIT warm-up, with variation about **4.7 s** and fused evaluation about **4.8 s**. This is a workload-specific measurement and should be compared on the same machine/environment.
+
+## V1.2.1 — Performance Regression Hotfix
+
+V1.2.1 removes the Python-side evolution bottlenecks discovered in V1.2.0 while preserving the V1.2 search-intelligence features. Normal regressors/classifiers now default to `optimization="scalar"`; the `publication` preset explicitly retains Pareto/NSGA-II search. Pareto reporting remains available in scalar mode and is built once at the end instead of being maintained every generation.
+
+Key hot-path changes:
+
+- NSGA-II ranking is performed at most once per generation when Pareto search is explicitly enabled.
+- Objective vectors are precomputed once per NSGA-II pass instead of being rebuilt inside pairwise dominance comparisons.
+- Pareto archive maintenance is skipped during scalar generations and performed once at the end for reporting.
+- Pareto archive updates use incremental first-front maintenance rather than a full repeated nondominated sort of archive + population.
+- Full resumable evolution-state cloning occurs only for requested checkpoints and the terminal generation.
+- New profiler stages expose `nsga2`, `pareto_archive`, and `state_snapshot` costs, plus counters for the number of calls/updates/snapshots.
+
+On the bundled development runtime, a 500-individual, 2-generation fused-Numba diabetes smoke run fell from about 13.1 s in V1.2.0 to about 0.45 s in V1.2.1. This is a workload-specific measurement, not a universal speedup claim.
+
+## V1.2.0 — Search Intelligence & Memetic Evolution
+
+V1.2.0 builds on the fully certified V1.1.5 line with Semantic GP 2.0, age-layered evolution, canonical symbolic forms, in-evolution memetic constant refinement and explicit final-model selection. All new search-intelligence systems are opt-in by default so existing V1.1.x workflows retain their behavior.
+
+### V1.2.0 example
+
+```python
+model = FastSymbolicRegressor(
+    semantic_diversity=True,
+    selection_method="semantic_tournament",
+    semantic_mutation_rate=0.10,
+    age_management="layered",
+    memetic_search="elites",
+    simplification="canonical",
+    model_selection="pareto_knee",
     random_state=42,
-    verbose=1,
+)
+```
+
+Diagnostics are available through `get_semantic_report()` and `get_evolution_diagnostics()`.
+
+
+## V1.1.5 — Publication & Scientific Certification
+
+V1.1.5 turns FastSymbolicGP experiments into resumable, statistically analyzable publication workflows without replacing the stable V1.1.4 scientific/evolution core.
+
+### What is new in 1.1.5
+
+- **Resumable repeated cross-validation benchmarking** with fold-level incremental persistence.
+- Deterministic **Nguyen 1–10** symbolic-regression functions and **Friedman-1** benchmark data.
+- Paired common-block **Friedman** omnibus tests.
+- Pairwise **Wilcoxon signed-rank** tests with **Holm** multiplicity correction.
+- **Rank-biserial effect sizes**, average ranks, and Nemenyi critical difference when SciPy is available.
+- Statistical analyses exclude incomplete blocks rather than silently mixing paired and unpaired results.
+- Cross-run structural/prediction **stability reports**.
+- Input-perturbation **robustness reports**.
+- Machine-readable **scientific certificates** combining fit state, dimensional/constraint certification, complexity, run fingerprint, and profile information.
+- **Reproducibility bundle v2** with safe-model export, reference arrays, environment capture and SHA-256 content hashes.
+- New `fastsymbolicgp-certify` CLI.
+- V1.1.4 typed-unit/hard-constraint support and V1.1.3 performance hardening are retained.
+
+## Install
+
+```bash
+python -m pip install "fastsymbolicgp[acceleration]==1.2.8"
+```
+
+Optional acceleration and scientific dependencies:
+
+```bash
+python -m pip install "fastsymbolicgp[acceleration]"
+python -m pip install "fastsymbolicgp[science]"
+```
+
+Then verify the installation:
+
+```bash
+fastsymbolicgp-self-test
+```
+
+## Regression
+
+```python
+from fastsymbolicgp import FastSymbolicRegressor
+
+model = FastSymbolicRegressor(
+    preset="balanced",
+    fitness_engine="auto",
+    evaluation_cache=True,
+    fitness_cache_max_entries=100000,
+    uncertainty="split_conformal",
+    random_state=42,
 )
 model.fit(X_train, y_train)
 
-print("Balanced accuracy:", balanced_accuracy_score(y_test, model.predict(X_test)))
-print("Expression:", model.get_expression())
-model.summary()
-```
-
-Named presets are now applied as defaults: explicitly supplied **non-default** parameter values are preserved. Use `preset_override_policy="always"` when the preset must replace them. `preset="auto"` additionally activates the workload-aware execution planner.
-
-## V1.0.0 core improvements
-
-- stable `FastSymbolicClassifier`, `FastSymbolicRegressor`, and `FastSymbolicTransformer` APIs;
-- population-level Numba postfix execution and fused classification/regression fitness;
-- exact run-level fitness reuse and intra-population duplicate reuse;
-- cached program size, depth, DAG, compiled postfix, structural hash, feature counts, function counts, and indexed variation paths;
-- flat compiled genome metadata through `program.flat_genome()`;
-- persistent thread pool for island evaluation instead of recreating workers every generation;
-- exact validation champion archive that is never lost through migration or Pareto replacement;
-- exact champion candidates refined every generation even when broader elite refinement runs less often;
-- exact-fitness-only final selection pool when exact candidates are available;
-- adaptive execution planner for `preset="auto"`;
-- progressive sampling for large datasets;
-- structural and optional semantic duplicate elimination;
-- adaptive operator and function weighting options;
-- adaptive parsimony and NSGA-II-style Pareto optimisation;
-- optional final champion constant optimisation with deterministic coordinate search;
-- binary threshold optimisation, calibration, class/sample weighting, OVR and shared-softmax multiclass;
-- time budgets and evaluation budgets;
-- checkpoint/resume, warm start, and branching;
-- model persistence, manifest generation, deployment export, and inference profiling;
-- `warmup()` for precompiling common kernels before timed experiments;
-- `profile_`, `resolved_config_`, `execution_plan_`, and `summary()` for transparent runs;
-- Publication Benchmark V4 with common folds and time/evaluation budget support.
-
-## Presets
-
-- `superfast` — aggressive exploratory throughput;
-- `fast` — general high-speed search;
-- `balanced` — stronger search with moderate complexity;
-- `accurate` — larger search and final champion constant refinement;
-- `interpretable` — compact final expressions;
-- `large_dataset` — progressive sampling and low-memory execution;
-- `publication` — full-data, reproducibility-oriented configuration with exact champion handling and constant refinement;
-- `compatibility` — conservative materialized scoring for comparisons;
-- `auto` — chooses a preset and then adapts execution topology to workload size.
-
-## Warm-up before timing
-
-```python
-from fastsymbolicgp import warmup
-print(warmup("all"))
-```
-
-This isolates first-use JIT compilation from the training time you want to report.
-
-## Exact champion model selection
-
-`elite_logistic` may use approximate scaling for broad screening. V1.0.0 always refines a configurable set of champion candidates exactly (`exact_champion_candidates`) and maintains `exact_validation_champion_`. Early stopping and the final exact-selection pool use this consistent validation scale.
-
-Useful attributes include:
-
-```python
-print(model.best_validation_program_)
-print(model.profile_)
-print(model.execution_plan_)
+print(model.get_expression())
+y_pred = model.predict(X_test)
+y_pred, lower, upper = model.predict_interval(X_test, confidence=0.95)
 print(model.resolved_config_)
-print(model.fitness_cache_statistics_)
+print(model.profile_["stage_seconds"])
 ```
 
-## Publication benchmark V4
+## Classification and parallel OVR
 
-```bat
-fastsymbolicgp-benchmark ^
-  --datasets breast_cancer,iris,wine ^
-  --algorithms fastsymbolicgp,logistic,random_forest,hist_gradient_boosting,svm ^
-  --runs 6 ^
-  --folds 5 ^
-  --population-size 64 ^
-  --generations 120 ^
-  --backend population_numba ^
-  --fitness-engine fused ^
-  --evaluation-budget 100000 ^
-  --output-dir benchmark_v100_results
+```python
+from fastsymbolicgp import FastSymbolicClassifier
+
+model = FastSymbolicClassifier(
+    preset="balanced",
+    fitness_scaling="elite_logistic",
+    fitness_engine="auto",
+    probability_calibration="auto",
+    ovr_parallel=True,
+    ovr_n_jobs="auto",
+    random_state=42,
+)
+model.fit(X_train, y_train)
+
+proba = model.predict_proba(X_test)
+pred = model.predict(X_test)
+print(model.profile_)
 ```
 
-You can use `--time-budget` instead of, or together with, `--evaluation-budget` for equal-compute studies.
+For multiclass OVR, outer class models can train concurrently. When more than one OVR worker is active, child estimators are automatically limited to `n_jobs=1` to avoid nested CPU oversubscription.
 
-## Stable versus experimental
+## Strongly typed scientific units
 
-The V1 stable surface includes classifier, regressor, transformer, multiclass learning, Pareto search, checkpointing, export, profiling, benchmark utilities, and model persistence. Experimental symbolic-network functionality remains available for backward compatibility and is also exposed through `fastsymbolicgp.experimental`.
+```python
+model = FastSymbolicRegressor(
+    function_set=("add", "sub", "mul", "div", "sqrt", "abs"),
+    feature_units={
+        "power_1": "W",
+        "power_2": "W",
+        "ratio": "1",
+    },
+    target_unit="W",
+    unit_policy="enforce",
+    typed_generation="auto",
+    random_state=42,
+)
+```
 
-## Local V1 acceptance benchmark
+With `unit_policy="enforce"` and known feature/target units, `typed_generation="auto"` activates dimension-aware tree construction and unit-preserving variation. `typed_generation="off"` retains the V1.1.2 generate/validate path if required for comparison studies.
 
-On the build environment, the forced 120-generation Breast Cancer workload (64 programs, two islands, Numba population execution, fused fitness, no early stopping, dashboard off, warmed kernels) completed in **4.19 s** with V1.0.0 versus **4.33 s** with V0.9.0. Test balanced accuracy was **0.9579** for V1.0.0 versus **0.9501** for V0.9.0 in that deterministic run. These are build-machine validation figures, not universal performance guarantees.
+### Typed constants, virtual constraints and Pareto objectives
+
+```python
+model = FastSymbolicRegressor(
+    function_set=("add", "sub", "mul", "div"),
+    feature_units={"pressure": "bar", "flow": "m^3/s", "temperature": "degC"},
+    target_unit="kW",
+    unit_policy="enforce",
+    constant_units={"kW": (-50.0, 50.0), "1": (-2.0, 2.0)},
+    constraints={
+        "mode": "hard",
+        "monotonic": {"pressure": "increasing"},
+        "virtual_n_points": 128,
+        "virtual_strategy": "latin_hypercube",
+        "virtual_ranges": {"pressure": [1.0, 20.0], "flow": [0.01, 2.0]},
+    },
+    pareto_objectives=("validation_loss", "weighted_complexity", "variables"),
+    random_state=42,
+)
+model.fit(X_train, y_train)
+
+print(model.get_unit_report())
+print(model.get_constraint_report())
+print(model.get_pareto_front_dataframe())
+```
+
+Physics-informed residuals may be supplied in `constraints["residuals"]`. A residual callable receives `(X, prediction)` or `(X, prediction, program)` and returns a scalar or one residual per constraint point. Because Python callables are runtime objects, they should be recreated when reloading a portable JSON model if post-load constraint recertification is required.
+
+## Island evolution and cross-island fused batching
+
+```python
+model = FastSymbolicRegressor(
+    evolution_model="islands",
+    n_islands=4,
+    island_parallel=True,
+    migration_interval=5,
+    migration_size=2,
+    fitness_engine="auto",
+    random_state=42,
+)
+```
+
+`population_size` remains the total population. In compatible fused workloads, all islands are scored in one population-level Numba batch and then continue with island-local selection/migration.
+
+## Fitness and compiled-program caching
+
+```python
+model = FastSymbolicRegressor(
+    evaluation_cache=True,
+    fitness_cache_max_entries=100000,
+)
+```
+
+The cache reuses exact structural duplicates across and within batches. Compiled postfix genomes are also cached per unchanged program structure. Diagnostics are exposed in `profile_` and `history_`.
+
+## Checkpoint and resume
+
+```python
+model = FastSymbolicRegressor(
+    generations=200,
+    checkpoint_path="run.chk",
+    checkpoint_interval=5,
+    random_state=42,
+)
+model.fit(X, y)
+
+restored = FastSymbolicRegressor.load_checkpoint("run.chk")
+prediction = restored.predict(X[:10])
+restored.resume_from_checkpoint = True
+restored.generations = 300
+restored.fit(X, y)
+```
+
+Checkpoints use atomic rotation and keep a `.prev` recovery copy. Resume validates the training-data fingerprint and continues from the saved next-generation population/RNG state.
+
+## V1 compatibility surface
+
+```python
+from fastsymbolicgp import (
+    FastSymbolicRegressor,
+    FastSymbolicClassifier,
+    FastSymbolicTransformer,
+    FastSymbolicNetworkClassifier,
+    DistilledSymbolicClassifier,
+    SymbolicProgram,
+    feature_stability,
+    subexpression_stability,
+)
+```
+
+Persistence/report helpers include `save_model`, `load_model`, `save`, `load`, `save_history_csv`, `save_report_json`, `save_expression`, `profile_prediction`, `summary`, `model_manifest` and `branch`.
+
+## Deployment and reproducibility
+
+```python
+model.export_python("model.py")
+model.export_c("model.c")
+model.export_cpp("model.cpp")
+model.export_javascript("model.js")
+model.export_reproducibility_bundle("run_001")
+```
+
+Python/C/C++/JavaScript portable export is supported for compatible estimator surfaces. Java/Kotlin portable code generation remains intentionally unavailable in V1.2.3 rather than returning an unverified export. Safe JSON and LaTeX/SymPy paths remain available where supported.
+
+## Benchmark CLI
+
+```bash
+fastsymbolicgp-benchmark --task regression --datasets diabetes --algorithms fastsymbolicgp,linear,random_forest,hist_gradient_boosting --folds 5 --runs 3 --output-dir benchmark_results
+```
+
+or classification:
+
+```bash
+fastsymbolicgp-benchmark --task classification --datasets breast_cancer,iris,wine --algorithms fastsymbolicgp,logistic,random_forest,hist_gradient_boosting --folds 5 --runs 3 --output-dir benchmark_results
+```
+
+## Scope and known limits
+
+V1.2.4 remains CPU-first and single-workstation. Numba acceleration is optional. Multiclass uses OVR; the older experimental shared-softmax path is not certified. Java/Kotlin portable code export is not certified. Strongly typed unit generation uses a bounded dimensional grammar closure: if the requested target dimension cannot be produced from the available feature dimensions and primitive set, fitting fails clearly instead of silently admitting invalid programs.
 
 ## Citation
 
-If FastSymbolicGP contributes to your research, please cite:
+If FastSymbolicGP contributes to research, cite the FastSymbolicGP publication and record the exact package version, resolved configuration, run fingerprint, and benchmark protocol used for the experiment.
 
-```bibtex
-@article{Andelic2026FastSymbolicGP,
-  author         = {Anđelić, Nikola},
-  title          = {FastSymbolicGP: A Lightweight Python Library for Efficient Symbolic Regression and Classification},
-  journal        = {Inventions},
-  year           = {2026},
-  volume         = {11},
-  number         = {4},
-  article-number = {80},
-  doi            = {10.3390/inventions11040080}
-}
-```
+## V1.2.6 runtime console
+
+FastSymbolicGP now shows a dependency-free runtime dashboard by default when `verbose>=1`.
+Use `verbose=2` to print every generation, or `display="off"` for silent execution.

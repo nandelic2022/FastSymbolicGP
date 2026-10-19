@@ -2,16 +2,13 @@ cff-version: 1.2.0
 message: "If you use FastSymbolicGP in your research, please cite the associated publication."
 title: "FastSymbolicGP"
 type: software
-version: "1.0.0"
-
+version: "1.2.8"
 authors:
   - family-names: "Anđelić"
     given-names: "Nikola"
-
 repository-code: "https://github.com/nandelic2022/FastSymbolicGP"
 url: "https://github.com/nandelic2022/FastSymbolicGP"
 license: "MIT"
-
 preferred-citation:
   type: article
   authors:
