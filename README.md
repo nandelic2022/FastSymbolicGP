@@ -1,8 +1,92 @@
 # FastSymbolicGP
 
-**Current release: 1.2.8** · Python 3.11+ · [GitHub](https://github.com/nandelic2022/FastSymbolicGP) · [PyPI](https://pypi.org/project/fastsymbolicgp/)
+[![PyPI Version](https://img.shields.io/pypi/v/fastsymbolicgp.svg)](https://pypi.org/project/fastsymbolicgp/)
+[![Python](https://img.shields.io/pypi/pyversions/fastsymbolicgp.svg)](https://pypi.org/project/fastsymbolicgp/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Research Paper](https://img.shields.io/badge/Research%20Paper-Inventions%20(MDPI)-brightgreen.svg)](https://doi.org/10.3390/inventions11040080)
 
-## V1.2.8 — Batched Tournament Scheduler
+**FastSymbolicGP** is an open-source Python library for **symbolic regression, binary and multiclass classification, and interpretable machine learning through genetic programming**. It provides a scikit-learn-compatible API, explicit mathematical expressions, accelerated CPU evaluation with optional Numba, and tools for reproducible scientific experiments.
+
+**Current release:** `v1.2.8` · **Python:** `3.11+` · **Author:** Nikola Anđelić  
+**Links:** [PyPI](https://pypi.org/project/fastsymbolicgp/) · [Source code](https://github.com/nandelic2022/FastSymbolicGP) · [Scientific paper](https://doi.org/10.3390/inventions11040080) · [Cite this software](CITATION.cff)
+
+## Published scientific paper
+
+> **Anđelić, N. (2026).** **FastSymbolicGP: A Lightweight Python Library for Efficient Symbolic Regression and Classification.** *Inventions*, **11**(4), Article 80.  
+> **DOI:** [10.3390/inventions11040080](https://doi.org/10.3390/inventions11040080)  
+> **Publisher:** MDPI · **Published:** 4 August 2026 · **Open access**
+
+**[Read the published paper (MDPI)](https://www.mdpi.com/2411-5134/11/4/80)** · **[DOI landing page](https://doi.org/10.3390/inventions11040080)**
+
+The peer-reviewed article introduces FastSymbolicGP and evaluates symbolic regression and classification, computational efficiency, interpretability, physical-law recovery, and reproducibility. It reports **940 successful benchmark runs** across the study's experimental protocols. Performance comparisons in that publication apply to its **evaluated configurations and computational budgets**, not as universal speed or accuracy guarantees for every dataset or subsequent release.
+
+**If you use FastSymbolicGP in published research, please cite this paper.** A copyable BibTeX entry is included in the [How to cite](#how-to-cite) section below; GitHub also provides a **Cite this repository** action through [`CITATION.cff`](CITATION.cff).
+
+## Quick start
+
+Install the current release from [PyPI](https://pypi.org/project/fastsymbolicgp/):
+
+```bash
+python -m pip install "fastsymbolicgp[acceleration]==1.2.8"
+```
+
+Or install the base package without the optional Numba extra:
+
+```bash
+python -m pip install fastsymbolicgp==1.2.8
+```
+
+Verify the installed version and basic functionality:
+
+```bash
+python -c "import fastsymbolicgp; print(fastsymbolicgp.__version__)"
+fastsymbolicgp-self-test
+```
+
+### Minimal symbolic regression example
+
+```python
+from sklearn.datasets import load_diabetes
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, r2_score
+from fastsymbolicgp import FastSymbolicRegressor
+
+X, y = load_diabetes(return_X_y=True)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.20, random_state=42
+)
+
+model = FastSymbolicRegressor(
+    population_size=64,
+    generations=20,
+    random_state=42,
+    verbose=1,
+)
+model.fit(X_train, y_train)
+
+predictions = model.predict(X_test)
+print("Expression:", model.get_expression())
+print("MAE:", mean_absolute_error(y_test, predictions))
+print("R2:", r2_score(y_test, predictions))
+```
+
+For classification, use `FastSymbolicClassifier` with the same familiar `fit`/`predict` workflow. More detailed examples, configuration options, benchmarking instructions, and checkpoint/resume functionality appear below.
+
+## Key capabilities
+
+- **Interpretable symbolic models:** exportable mathematical expressions for regression and classification.
+- **Fast CPU execution:** optional Numba evaluation, fused fitness calculations, caching, and a rootless postfix genome fast path where compatible.
+- **Flexible evolution:** tournament selection, multiple variation operators, island evolution, Pareto search, and optional semantic or memetic methods.
+- **Scientific constraints:** unit-aware symbolic search, typed operators, dimensional consistency, and constraints.
+- **Reproducible experiments:** random-state control, profiling, diagnostic reports, checkpoints, and resumable runs.
+- **Scientific reporting:** model complexity, reproducibility bundles, statistical comparisons, and scientific certification utilities.
+- **Ecosystem integration:** a scikit-learn-compatible API and command-line tools.
+
+**Scope:** CPU-first software intended for scientific and research workflows. The paper introduces and evaluates the research approach; **v1.2.8** contains additional engineering and optimization developments made after the paper's evaluated implementation.
+
+---
+
+## Release notes — V1.2.8 batched tournament scheduler
 
 V1.2.8 accelerates the standard scalar+tournament path with a vectorized exact-distribution tournament scheduler, while retaining the Numba-first rootless genome engine, fused regression scoring, scientific constraints, unit-aware GP, publication tooling, and expression simplification from prior releases.
 
@@ -43,7 +127,6 @@ V1.2.4 keeps the V1.2.3 ultra-fast search core and focuses on equation quality. 
 
 New public APIs include `get_raw_expression()`, a corrected `get_expression()` that includes the fitted affine scale/intercept, `get_simplification_report()`, `safe_simplify_program()`, and `certified_simplify_program()`. `verbose=2` now reports every generation with a compact progress line; `verbose=1` keeps periodic output.
 
-FastSymbolicGP is a scikit-learn-style symbolic machine-learning library for symbolic regression, classification, scientific constraints, physical-unit-aware search, uncertainty, reproducibility, and high-throughput CPU execution.
 
 
 
@@ -318,13 +401,35 @@ fastsymbolicgp-benchmark --task classification --datasets breast_cancer,iris,win
 
 ## Scope and known limits
 
-V1.2.4 remains CPU-first and single-workstation. Numba acceleration is optional. Multiclass uses OVR; the older experimental shared-softmax path is not certified. Java/Kotlin portable code export is not certified. Strongly typed unit generation uses a bounded dimensional grammar closure: if the requested target dimension cannot be produced from the available feature dimensions and primitive set, fitting fails clearly instead of silently admitting invalid programs.
+V1.2.8 remains CPU-first and single-workstation. Numba acceleration is optional. Multiclass uses OVR; the older experimental shared-softmax path is not certified. Java/Kotlin portable code export is not certified. Strongly typed unit generation uses a bounded dimensional grammar closure: if the requested target dimension cannot be produced from the available feature dimensions and primitive set, fitting fails clearly instead of silently admitting invalid programs.
 
-## Citation
+## Runtime console
 
-If FastSymbolicGP contributes to research, cite the FastSymbolicGP publication and record the exact package version, resolved configuration, run fingerprint, and benchmark protocol used for the experiment.
-
-## V1.2.6 runtime console
-
-FastSymbolicGP now shows a dependency-free runtime dashboard by default when `verbose>=1`.
+FastSymbolicGP shows a dependency-free runtime dashboard when `verbose>=1`.
 Use `verbose=2` to print every generation, or `display="off"` for silent execution.
+
+## How to cite
+
+Please cite the peer-reviewed article describing FastSymbolicGP:
+
+**Anđelić, N. (2026).** FastSymbolicGP: A Lightweight Python Library for Efficient Symbolic Regression and Classification. *Inventions*, **11**(4), 80. https://doi.org/10.3390/inventions11040080
+
+```bibtex
+@article{Andelic2026FastSymbolicGP,
+  author  = {Anđelić, Nikola},
+  title   = {FastSymbolicGP: A Lightweight Python Library for Efficient Symbolic Regression and Classification},
+  journal = {Inventions},
+  year    = {2026},
+  volume  = {11},
+  number  = {4},
+  pages   = {80},
+  doi     = {10.3390/inventions11040080},
+  url     = {https://doi.org/10.3390/inventions11040080}
+}
+```
+
+Please also report the **FastSymbolicGP version** (for example, `1.2.8`), the random seed, relevant configuration, dataset/split details, and evaluation protocol so that others can reproduce your results. The [`CITATION.cff`](CITATION.cff) file enables GitHub's **Cite this repository** button.
+
+## License
+
+FastSymbolicGP is distributed under the [MIT License](LICENSE).
