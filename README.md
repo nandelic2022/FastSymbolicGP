@@ -4,11 +4,12 @@
 [![Python](https://img.shields.io/pypi/pyversions/fastsymbolicgp.svg)](https://pypi.org/project/fastsymbolicgp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Research Paper](https://img.shields.io/badge/Research%20Paper-Inventions%20(MDPI)-brightgreen.svg)](https://doi.org/10.3390/inventions11040080)
+[![Research Project: GENE-CLASS](https://img.shields.io/badge/Research%20Project-GENE--CLASS-0A5C94.svg)](https://www.croris.hr/projekti/projekt/14072)
 
 **FastSymbolicGP** is an open-source Python library for **symbolic regression, binary and multiclass classification, and interpretable machine learning through genetic programming**. It provides a scikit-learn-compatible API, explicit mathematical expressions, accelerated CPU evaluation with optional Numba, and tools for reproducible scientific experiments.
 
 **Current release:** `v1.2.8` · **Python:** `3.11+` · **Author:** Nikola Anđelić  
-**Links:** [PyPI](https://pypi.org/project/fastsymbolicgp/) · [Source code](https://github.com/nandelic2022/FastSymbolicGP) · [Scientific paper](https://doi.org/10.3390/inventions11040080) · [Cite this software](CITATION.cff)
+**Links:** [PyPI](https://pypi.org/project/fastsymbolicgp/) · [Source code](https://github.com/nandelic2022/FastSymbolicGP) · [Scientific paper](https://doi.org/10.3390/inventions11040080) · [Cite this software](CITATION.cff) · [GENE-CLASS project](https://www.croris.hr/projekti/projekt/14072)
 
 ## Published scientific paper
 
@@ -21,6 +22,30 @@
 The peer-reviewed article introduces FastSymbolicGP and evaluates symbolic regression and classification, computational efficiency, interpretability, physical-law recovery, and reproducibility. It reports **940 successful benchmark runs** across the study's experimental protocols. Performance comparisons in that publication apply to its **evaluated configurations and computational budgets**, not as universal speed or accuracy guarantees for every dataset or subsequent release.
 
 **If you use FastSymbolicGP in published research, please cite this paper.** A copyable BibTeX entry is included in the [How to cite](#how-to-cite) section below; GitHub also provides a **Cite this repository** action through [`CITATION.cff`](CITATION.cff).
+
+## Research project and funding — GENE-CLASS
+
+FastSymbolicGP supports research associated with **GENE-CLASS**, an institutional research project of the **University of Rijeka** investigating genetic programming as a CPU-oriented, energy-efficient approach to image classification.
+
+| Project information | Details |
+| --- | --- |
+| **Project acronym** | **GENE-CLASS** |
+| **Official title (Croatian)** | *Energetski učinkovita klasifikacija slika: alternativa dubokom učenju temeljena na genetskom programiranju* |
+| **English title** | *Energy-Efficient Image Classification: A Genetic Programming-Based Alternative to Deep Learning* |
+| **Project identifiers** | `uniri-iz-25-220` · `PU-340` |
+| **Principal investigator** | **Nikola Anđelić** |
+| **Institution** | **University of Rijeka — Faculty of Engineering (Tehnički fakultet)**, Croatia |
+| **Duration** | **2025–2029** (48 months) |
+| **Funding framework** | University of Rijeka institutional research projects; **National Recovery and Resilience Plan (NPOO)** / **Recovery and Resilience Facility (RRF)** |
+| **Official project record** | [GENE-CLASS on CroRIS](https://www.croris.hr/projekti/projekt/14072) |
+
+**Connection to FastSymbolicGP.** The library provides reusable algorithms for symbolic classification, interpretable expression discovery, and efficient CPU-based genetic programming. These capabilities contribute to the methodological foundation for research on evolutionary feature extraction and image classification within GENE-CLASS. **The project-specific image-feature extraction and image-classification pipeline is separate, ongoing research**; FastSymbolicGP itself should not be interpreted as a completed image-classification system or as proof of lower energy consumption than CNNs.
+
+**Suggested project acknowledgment (where applicable):**
+
+> This research was supported by the University of Rijeka institutional research project **GENE-CLASS** (*Energy-Efficient Image Classification: A Genetic Programming-Based Alternative to Deep Learning*), project **uniri-iz-25-220 (PU-340)**, funded under the **National Recovery and Resilience Plan (NPOO) / Recovery and Resilience Facility (RRF)**.
+
+For scholarly use of the software, please **cite the FastSymbolicGP paper separately** using the reference in [How to cite](#how-to-cite).
 
 ## Quick start
 
